@@ -30,9 +30,9 @@ The performance is basically on par with the original project.
 
 ## Update Log
 
-- **[2025-08-07]** Added support for fully automated one-click deployment of the API service using Docker: `docker compose up`
+- **[2024-08-07]** Added support for fully automated one-click deployment of the API service using Docker: `docker compose up`
 
-- **[2025-08-06]** Added support for OpenAI API format calls:
+- **[2024-08-06]** Added support for OpenAI API format calls:
     1. Added `/audio/speech` API path to be compatible with the OpenAI interface.
     2. Added `/audio/voices` API path to get the list of voices/characters.
     - Corresponds to: [createSpeech](https://platform.openai.com/docs/api-reference/audio/createSpeech)
@@ -41,7 +41,7 @@ The performance is basically on par with the original project.
 
 ### 1. Clone this project
 ```bash
-git clone https://github.com/Ksuriuri/index-tts-vllm.git
+git clone https://github.com/CreateIntelligens/index-tts-vllm.git
 cd index-tts-vllm
 ```
 
@@ -77,14 +77,18 @@ These are the official weight files. Download them to any local path. Weights fo
 
 ### 6. Convert model weights
 
+Place the downloaded model weights in the `assets/checkpoints/` directory, then run the conversion script:
+
 ```bash
-bash convert_hf_format.sh /path/to/your/model_dir
+bash convert_hf_format.sh assets/checkpoints
 ```
 
 This operation will convert the official model weights to a format compatible with the transformers library, saving them in the `vllm` folder under the model weight path, which facilitates subsequent loading of model weights by the vllm library.
 
+> **Note:** If using Docker deployment (see Docker Deployment section below), the model conversion will be completed automatically when the container starts, and you do not need to manually execute this step.
+
 ### 7. Launch the web UI!
-Modify the `model_dir` in [`webui.py`](webui.py) to your model weight download path, and then run:
+Modify the `model_dir` in [`webui.py`](webui.py) to your model weight path (default is `assets/checkpoints/`), and then run:
 
 ```bash
 VLLM_USE_V1=0 python webui.py
@@ -94,33 +98,81 @@ The first launch might take a while because it needs to compile the CUDA kernel 
 Note: You must include `VLLM_USE_V1=0`, as this project is not compatible with v1 of vllm.
 
 
-## API
+## API Deployment
+
+### Method 1: Run Python Script Directly
 
 The API is encapsulated using FastAPI. Here is an example of how to start it:
 
 ```bash
-VLLM_USE_V1=0 python api_server.py --model_dir /your/path/to/Index-TTS --port 11996
+VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8001
 ```
 
 Note: You must include `VLLM_USE_V1=0`, as this project is not compatible with v1 of vllm.
 
 ### Startup Parameters
-- `--model_dir`: Download path for the model weights.
-- `--host`: Service IP address.
-- `--port`: Service port.
-- `--gpu_memory_utilization`: vllm GPU memory utilization rate, default is `0.25`.
+- `--model_dir`: Model weight path, default is `assets/checkpoints`
+- `--host`: Service IP address, default is `0.0.0.0`
+- `--port`: Service port, default is `8001`
+- `--gpu_memory_utilization`: vllm GPU memory utilization rate, default is `0.25`
 
-### Request Example
+### Method 2: Docker Compose Deployment (Recommended)
+
+Using Docker Compose allows for one-click deployment without manual environment configuration:
+
+```bash
+# 1. Ensure Docker and Docker Compose are installed
+# 2. Copy the environment variable configuration file
+cp .env.example .env
+
+# 3. Edit the .env file to configure model-related parameters (optional)
+# MODEL_DIR=assets/checkpoints
+# PORT=8001
+# GPU_MEMORY_UTILIZATION=0.25
+# DOWNLOAD_MODEL=1  # Automatically download model on first start
+# CONVERT_MODEL=1   # Automatically convert model format
+
+# 4. Start the service
+docker compose up
+```
+
+Advantages of Docker deployment:
+- ✅ Automatically download model weights (set `DOWNLOAD_MODEL=1`)
+- ✅ Automatically convert model format (set `CONVERT_MODEL=1`)
+- ✅ No need to manually configure Python environment
+- ✅ GPU acceleration support
+- ✅ Logs automatically saved to `logs/` directory
+
+> **Note:** On the first startup, if automatic download is enabled, it will take a considerable amount of time to download the model (approximately 3-4 GB).
+
+### Request Examples
+
+#### Basic TTS Request
 ```python
 import requests
 
-url = "http://0.0.0.0:11996/tts_url"
+url = "http://localhost:8001/tts_url"
 data = {
     "text": "Still thinking of you, still want to see you.",
     "audio_paths": [  # Supports multiple reference audios
         "audio1.wav",
         "audio2.wav"
     ]
+}
+
+response = requests.post(url, json=data)
+with open("output.wav", "wb") as f:
+    f.write(response.content)
+```
+
+#### Using Pre-registered Characters
+```python
+import requests
+
+url = "http://localhost:8001/tts"
+data = {
+    "text": "Hello, this is test text",
+    "character": "test"  # Use character defined in assets/speaker.json
 }
 
 response = requests.post(url, json=data)

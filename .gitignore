@@ -1,14 +1,72 @@
+# Python
 __pycache__/
-.vscode
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
 
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment Variables
+.env
+.env.local
+
+# Model Files (Large Files)
+# Ignore everything in checkpoints folder except the folder itself
+assets/checkpoints/*
+!assets/checkpoints/.gitkeep
+
+# Voice Files
+# Ignore everything in voices folder except the folder itself
+assets/voices/*
+!assets/voices/.gitkeep
+
+# Output Files
 outputs/
+*.wav
+*.mp3
+*.flac
+
+# Logs
+logs/*.log
+*.log
+
+# Temporary Files
 temp.py
-
-# assets/
-
-temp_gpt2.py    
-
+temp_*.py
 smoothquart.py
+*.tmp
 
+# Test Scripts
+test_log.py
+verify_audio_params.py
 
-assets/checkpoints/
+# Audio Prompts (可能包含測試音檔)
+audio_prompts/*.wav
+audio_prompts/*.mp3
+
+# Docker
+.dockerignore
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Test Outputs
+test_output/
+regression_output/

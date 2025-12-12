@@ -78,6 +78,14 @@ class TTSProcessingInfo(BaseProcessingInfo):
 
 class TTSDummyInputsBuilder(BaseDummyInputsBuilder[TTSProcessingInfo]):
 
+    def get_dummy_text(self, seq_len: int) -> str:
+        """Generate dummy text for TTS model."""
+        return ""
+
+    def get_dummy_mm_data(self, mm_counts: Mapping[str, int]) -> "MultiModalDataDict":
+        """Generate dummy multimodal data for TTS model."""
+        return {}
+
     def get_dummy_processor_inputs(
         self,
         seq_len: int,
@@ -100,6 +108,7 @@ class TTSMultiModalProcessor(BaseMultiModalProcessor[TTSProcessingInfo]):
         prompt: str,
         mm_data: Mapping[str, object],
         mm_kwargs: Mapping[str, object],
+        tok_kwargs: Optional[Mapping[str, object]] = None,
     ) -> BatchFeature:
         # print("prompt:", prompt)
         # print("mm_data:", mm_data)
