@@ -70,3 +70,5 @@ Thumbs.db
 # Test Outputs
 test_output/
 regression_output/
+
+gpt1212/
