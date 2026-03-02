@@ -58,7 +58,7 @@ cp .env.example .env
 # 4. （可選）編輯 .env 檔案，配置模型相關參數
 # MODEL=IndexTeam/IndexTTS-1.5
 # MODEL_DIR=assets/checkpoints
-# PORT=8001
+# PORT=8011
 # GPU_MEMORY_UTILIZATION=0.25
 # DOWNLOAD_MODEL=1  # 首次啟動時自動下載模型
 # CONVERT_MODEL=1   # 自動轉換模型格式
@@ -144,7 +144,7 @@ VLLM_USE_V1=0 python webui.py
 使用 FastAPI 封裝的 API 接口，啟動範例如下：
 
 ```bash
-VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8001
+VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8011
 ```
 
 **注意：** 一定要帶上 `VLLM_USE_V1=0`，因為本專案沒有對 vLLM 的 v1 版本做相容。
@@ -152,7 +152,7 @@ VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8001
 #### 啟動參數
 - `--model_dir`: 模型權重路徑，預設為 `assets/checkpoints`
 - `--host`: 服務 IP 位址，預設為 `0.0.0.0`
-- `--port`: 服務埠口，預設為 `8001`
+- `--port`: 服務埠口，預設為 `8011`
 - `--gpu_memory_utilization`: vLLM 顯存佔用率，預設設置為 `0.25`
 
 ### 方法二：Docker Compose 部署（推薦）
@@ -167,7 +167,7 @@ cp .env.example .env
 # 3. 編輯 .env 檔案，配置模型相關參數（可選）
 # MODEL=IndexTeam/IndexTTS-1.5
 # MODEL_DIR=assets/checkpoints
-# PORT=8001
+# PORT=8011
 # GPU_MEMORY_UTILIZATION=0.25
 # DOWNLOAD_MODEL=1  # 首次啟動時自動下載模型
 # CONVERT_MODEL=1   # 自動轉換模型格式
@@ -196,7 +196,7 @@ docker compose up -d
 ```python
 import requests
 
-url = "http://localhost:8001/tts_url"
+url = "http://localhost:8011/tts_url"
 data = {
     "text": "還是會想你，還是想登你",
     "audio_paths": [  # 支援多參考音訊
@@ -214,7 +214,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8001/tts"
+url = "http://localhost:8011/tts"
 data = {
     "text": "你好，這是測試文本",
     "character": "test"  # 使用 assets/speaker.json 中定義的角色
@@ -229,7 +229,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8001/audio/speech"
+url = "http://localhost:8011/audio/speech"
 data = {
     "model": "tts-1",
     "input": "這是使用 OpenAI 格式的測試",
@@ -245,7 +245,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8001/audio/voices"
+url = "http://localhost:8011/audio/voices"
 response = requests.get(url)
 print(response.json())
 # 輸出: {"voices": ["test", "abin", "ann", "hayley", ...]}
@@ -284,10 +284,10 @@ print(response.json())
 
 ```bash
 # 基本併發測試
-python simple_test.py --url http://localhost:8001/tts --concurrency 16
+python simple_test.py --url http://localhost:8011/tts --concurrency 16
 
 # 測試多個端點
-python simple_test.py --url http://server1:8001/tts http://server2:8001/tts --concurrency 32
+python simple_test.py --url http://server1:8011/tts http://server2:8011/tts --concurrency 32
 ```
 
 ## 微調模型部署
