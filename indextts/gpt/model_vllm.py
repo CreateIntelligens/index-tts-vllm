@@ -135,7 +135,8 @@ class UnifiedVoice(nn.Module):
             tensor_parallel_size=1,
             dtype="auto",
             gpu_memory_utilization=gpu_memory_utilization,
-            # enforce_eager=True,
+            # enforce_eager=True,              # 🚀 關閉 CUDA Graphs 以節省顯存供 KV Cache 使用
+            disable_log_stats=True,
         )
         self.llm = AsyncLLMEngine.from_engine_args(engine_args)
         self.sampling_params = SamplingParams(

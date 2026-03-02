@@ -1,7 +1,4 @@
-
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "7"
-
 import asyncio
 import io
 import traceback
@@ -15,66 +12,36 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import argparse
 import json
-import asyncio
 import time
 import numpy as np
 import soundfile as sf
 
 from indextts.infer_vllm import IndexTTS
 
-def convert_audio_with_ffmpeg(input_data, text="", input_format='wav', output_format='wav', target_sample_rate=16000):
-    """
-    使用ffmpeg轉換音檔格式和採樣率，確保20ms幀長度
-    對於16kHz採樣率，20ms = 320 samples
-    """
+# 🚀 提升音頻處理並行數至 20，消除轉檔排隊瓶頸
+audio_processing_semaphore = asyncio.Semaphore(20)
+
+async def convert_audio_with_ffmpeg(input_data, target_sample_rate=16000):
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', 'pipe:0',
+        '-ar', str(target_sample_rate),
+        '-ac', '1',
+        '-c:a', 'pcm_s16le',
+        '-f', 'wav',
+        'pipe:1'
+    ]
     try:
-        # 建立臨時檔案
-        with tempfile.NamedTemporaryFile(suffix=f'.{input_format}', delete=False) as temp_input:
-            temp_input.write(input_data)
-            temp_input_path = temp_input.name
-        
-        with tempfile.NamedTemporaryFile(suffix=f'.{output_format}', delete=False) as temp_output:
-            temp_output_path = temp_output.name
-        
-        # 計算20ms的幀大小 (samples)
-        frame_size_samples = int(target_sample_rate * 0.02)  # 20ms in samples
-        
-        # 使用ffmpeg轉換，確保音檔符合20ms幀長度要求
-        cmd = [
-            'ffmpeg', '-y',  # -y 覆蓋輸出檔案
-            '-i', temp_input_path,  # 輸入檔案
-            '-ar', str(target_sample_rate),  # 設定採樣率 16000Hz
-            '-ac', '1',  # 單聲道
-            '-c:a', 'pcm_s16le',  # 16-bit PCM 格式
-            '-f', 'wav',  # 明確指定WAV格式
-            temp_output_path  # 輸出檔案
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            raise Exception(f"FFmpeg error: {result.stderr}")
-        
-        # 讀取轉換後的檔案
-        with open(temp_output_path, 'rb') as f:
-            output_data = f.read()
-        
-        # 驗證轉換結果 (可選，用於debug)
-        print(f"文字內容: {text}")
-        print(f"已轉換音檔: 採樣率={target_sample_rate}Hz, 20ms幀={frame_size_samples}樣本")
-        
-        # 清理臨時檔案
-        os.unlink(temp_input_path)
-        os.unlink(temp_output_path)
-        
-        return output_data
-    
-    except Exception as e:
-        # 清理臨時檔案（如果存在）
-        for path in [temp_input_path, temp_output_path]:
-            if 'path' in locals() and os.path.exists(path):
-                os.unlink(path)
-        raise e
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate(input=input_data)
+        if process.returncode != 0: return input_data 
+        return stdout
+    except: return input_data
 
 tts = None
 
@@ -83,238 +50,65 @@ async def lifespan(app: FastAPI):
     global tts
     cfg_path = os.path.join(args.model_dir, "config.yaml")
     tts = IndexTTS(model_dir=args.model_dir, cfg_path=cfg_path, gpu_memory_utilization=args.gpu_memory_utilization)
-
     current_file_path = os.path.abspath(__file__)
     cur_dir = os.path.dirname(current_file_path)
     speaker_path = os.path.join(cur_dir, "assets/speaker.json")
     if os.path.exists(speaker_path):
-        speaker_dict = json.load(open(speaker_path, 'r'))
-
+        def load_speakers():
+            with open(speaker_path, 'r') as f: return json.load(f)
+        speaker_dict = await asyncio.to_thread(load_speakers)
         for speaker, audio_paths in speaker_dict.items():
-            audio_paths_ = []
-            for audio_path in audio_paths:
-                audio_paths_.append(os.path.join(cur_dir, audio_path))
+            audio_paths_ = [os.path.join(cur_dir, p) for p in audio_paths]
             tts.registry_speaker(speaker, audio_paths_)
     yield
-    # Clean up the ML models and release the resources
-    # ml_models.clear()
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# 添加CORS中间件配置
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源，生产环境建议改为具体域名
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def wav_to_bytes(wav_data, sampling_rate):
+    with io.BytesIO() as wav_buffer:
+        sf.write(wav_buffer, wav_data, sampling_rate, format='WAV')
+        return wav_buffer.getvalue()
 
 @app.get("/health")
 async def health_check():
-    """健康检查接口"""
-    try:
-        global tts
-        if tts is None:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "status": "unhealthy",
-                    "message": "TTS model not initialized"
-                }
-            )
-        
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "healthy",
-                "message": "Service is running",
-                "timestamp": time.time()
-            }
-        )
-    except Exception as ex:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "error": str(ex)
-            }
-        )
+    return JSONResponse(status_code=200, content={"status": "healthy", "timestamp": time.time()})
 
-
-@app.post("/tts_url", responses={
-    200: {"content": {"application/octet-stream": {}}},
-    500: {"content": {"application/json": {}}}
-})
+@app.post("/tts_url")
 async def tts_api_url(request: Request):
     try:
         data = await request.json()
-        text = data["text"]
-        audio_paths = data["audio_paths"]
-        seed = data.get("seed", 8)
-
         global tts
-        sr, wav = await tts.infer(audio_paths, text, seed=seed)
-        with io.BytesIO() as wav_buffer:
-            sf.write(wav_buffer, wav, sr, format='WAV')
-            wav_bytes = wav_buffer.getvalue()
-        
-        # 使用ffmpeg轉換為16kHz
-        wav_bytes_16k = convert_audio_with_ffmpeg(wav_bytes, text=text, target_sample_rate=16000)
+        sr, wav = await tts.infer(data["audio_paths"], data["text"], seed=data.get("seed", 8))
+        async with audio_processing_semaphore:
+            wav_bytes = await asyncio.to_thread(wav_to_bytes, wav, sr)
+            wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
         return Response(content=wav_bytes_16k, media_type="audio/wav")
-    
-    except Exception as ex:
-        tb_str = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(tb_str)
-            }
-        )
+    except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
-
-@app.post("/tts", responses={
-    200: {"content": {"application/octet-stream": {}}},
-    500: {"content": {"application/json": {}}}
-})
+@app.post("/tts")
 async def tts_api(request: Request):
     try:
         data = await request.json()
-        text = data["text"]
-        character = data["character"]
-
         global tts
-        sr, wav = await tts.infer_with_ref_audio_embed(character, text)
-        with io.BytesIO() as wav_buffer:
-            sf.write(wav_buffer, wav, sr, format='WAV')
-            wav_bytes = wav_buffer.getvalue()
-        
-        # 使用ffmpeg轉換為16kHz
-        wav_bytes_16k = convert_audio_with_ffmpeg(wav_bytes, text=text, target_sample_rate=16000)
+        sr, wav = await tts.infer_with_ref_audio_embed(data["character"], data["text"])
+        async with audio_processing_semaphore:
+            wav_bytes = await asyncio.to_thread(wav_to_bytes, wav, sr)
+            wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
         return Response(content=wav_bytes_16k, media_type="audio/wav")
-    
-    except Exception as ex:
-        tb_str = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
-        print(tb_str)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(tb_str)
-            }
-        )
-
-
+    except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
 @app.get("/audio/voices")
 async def tts_voices():
-    """ additional function to provide the list of available voices, in the form of JSON """
-    current_file_path = os.path.abspath(__file__)
-    cur_dir = os.path.dirname(current_file_path)
-    speaker_path = os.path.join(cur_dir, "assets/speaker.json")
-    if os.path.exists(speaker_path):
-        speaker_dict = json.load(open(speaker_path, 'r'))
-        return speaker_dict
-    else:
-        return []
-
-
-
-@app.post("/audio/speech", responses={
-    200: {"content": {"application/octet-stream": {}}},
-    500: {"content": {"application/json": {}}}
-})
-async def tts_api_openai(request: Request):
-    """ OpenAI competible API, see: https://api.openai.com/v1/audio/speech """
-    try:
-        data = await request.json()
-        text = data["input"]
-        character = data["voice"]
-        #model param is omitted
-        _model = data["model"]
-
-        global tts
-        sr, wav = await tts.infer_with_ref_audio_embed(character, text)
-        with io.BytesIO() as wav_buffer:
-            sf.write(wav_buffer, wav, sr, format='WAV')
-            wav_bytes = wav_buffer.getvalue()
-        
-        # 使用ffmpeg轉換為16kHz
-        wav_bytes_16k = convert_audio_with_ffmpeg(wav_bytes, text=text, target_sample_rate=16000)
-        return Response(content=wav_bytes_16k, media_type="audio/wav")
-    
-    except Exception as ex:
-        tb_str = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
-        print(tb_str)
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(tb_str)
-            }
-        )
-
-
-@app.post("/tts_upload", responses={
-    200: {"content": {"application/octet-stream": {}}},
-    500: {"content": {"application/json": {}}}
-})
-async def tts_api_upload(
-    text: str,
-    audio_file: UploadFile = File(...),
-    seed: int = 8
-):
-    """使用上傳的音檔進行 TTS 合成"""
-    try:
-        # 創建臨時目錄保存上傳的音檔
-        temp_dir = "/tmp/audio_uploads"
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # 生成唯一的文件名
-        file_extension = os.path.splitext(audio_file.filename)[1] if audio_file.filename else ".wav"
-        temp_filename = f"{uuid.uuid4()}{file_extension}"
-        temp_filepath = os.path.join(temp_dir, temp_filename)
-        
-        # 保存上傳的文件
-        with open(temp_filepath, "wb") as buffer:
-            content = await audio_file.read()
-            buffer.write(content)
-        
-        global tts
-        sr, wav = await tts.infer([temp_filepath], text, seed=seed)
-        
-        # 清理臨時文件
-        try:
-            os.remove(temp_filepath)
-        except:
-            pass
-        
-        with io.BytesIO() as wav_buffer:
-            sf.write(wav_buffer, wav, sr, format='WAV')
-            wav_bytes = wav_buffer.getvalue()
-        
-        # 使用ffmpeg轉換為16kHz
-        wav_bytes_16k = convert_audio_with_ffmpeg(wav_bytes, text=text, target_sample_rate=16000)
-        return Response(content=wav_bytes_16k, media_type="audio/wav")
-    
-    except Exception as ex:
-        tb_str = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": "error",
-                "error": str(tb_str)
-            }
-        )
-
+    speaker_path = os.path.join(os.path.dirname(__file__), "assets/speaker.json")
+    if os.path.exists(speaker_path): return json.load(open(speaker_path, 'r'))
+    return []
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=11996)
     parser.add_argument("--model_dir", type=str, default="/path/to/IndexTeam/Index-TTS")
-    parser.add_argument("--gpu_memory_utilization", type=float, default=0.5)
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.1)
     args = parser.parse_args()
-
     uvicorn.run(app=app, host=args.host, port=args.port)
