@@ -78,11 +78,23 @@ async def health_check():
 async def tts_api_url(request: Request):
     try:
         data = await request.json()
+        text = data.get("text", "")
+        audio_paths = data.get("audio_paths", [])
+        seed = data.get("seed", 8)
+        
+        print(f"\n--- [TTS_URL Request] ---")
+        print(f"Text: {text}")
+        print(f"Audio Paths: {audio_paths}")
+        print(f"Seed: {seed}")
+        print(f"-------------------------\n")
+
         global tts
-        sr, wav = await tts.infer(data["audio_paths"], data["text"], seed=data.get("seed", 8))
+        sr, wav = await tts.infer(audio_paths, text, seed=seed)
+        
         async with audio_processing_semaphore:
             wav_bytes = await asyncio.to_thread(wav_to_bytes, wav, sr)
             wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
+            
         return Response(content=wav_bytes_16k, media_type="audio/wav")
     except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
@@ -90,11 +102,21 @@ async def tts_api_url(request: Request):
 async def tts_api(request: Request):
     try:
         data = await request.json()
+        text = data.get("text", "")
+        character = data.get("character", "")
+        
+        print(f"\n--- [TTS Request] ---")
+        print(f"Text: {text}")
+        print(f"Character: {character}")
+        print(f"---------------------\n")
+
         global tts
-        sr, wav = await tts.infer_with_ref_audio_embed(data["character"], data["text"])
+        sr, wav = await tts.infer_with_ref_audio_embed(character, text)
+        
         async with audio_processing_semaphore:
             wav_bytes = await asyncio.to_thread(wav_to_bytes, wav, sr)
             wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
+            
         return Response(content=wav_bytes_16k, media_type="audio/wav")
     except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 

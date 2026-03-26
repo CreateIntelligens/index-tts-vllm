@@ -14,7 +14,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     ports:
-      - "${PORT:-8011}:${PORT:-8011}"
+      - "${PORT:-8001}:${PORT:-8001}"
     deploy:
       resources:
         reservations:
