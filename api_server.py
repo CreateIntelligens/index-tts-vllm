@@ -1,12 +1,13 @@
 import os
 import asyncio
 import io
+import struct
 import traceback
 import tempfile
 import uuid
 import subprocess
 from fastapi import FastAPI, Request, Response, UploadFile, File
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -65,6 +66,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+def make_wav_header(sample_rate=24000, channels=1, bits_per_sample=16):
+    """Build a streaming-friendly WAV header with unknown data size (0xFFFFFFFF)."""
+    data_size = 0xFFFFFFFF
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    return struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF', data_size, b'WAVE',
+        b'fmt ', 16, 1, channels, sample_rate,
+        byte_rate, block_align, bits_per_sample,
+        b'data', data_size,
+    )
+
 def wav_to_bytes(wav_data, sampling_rate):
     with io.BytesIO() as wav_buffer:
         sf.write(wav_buffer, wav_data, sampling_rate, format='WAV')
@@ -119,6 +133,67 @@ async def tts_api(request: Request):
             
         return Response(content=wav_bytes_16k, media_type="audio/wav")
     except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
+
+@app.post("/tts_url_stream")
+async def tts_url_stream(request: Request):
+    try:
+        data = await request.json()
+        text = data.get("text", "")
+        audio_paths = data.get("audio_paths", [])
+        seed = data.get("seed", None)
+
+        print(f"\n--- [TTS_URL_STREAM Request] ---")
+        print(f"Text: {text}")
+        print(f"Audio Paths: {audio_paths}")
+        print(f"--------------------------------\n")
+
+        global tts
+
+        async def generate():
+            yield make_wav_header(sample_rate=16000)
+            async for wav_chunk in tts.infer_stream(audio_paths, text, seed=seed):
+                yield wav_chunk.tobytes()
+
+        return StreamingResponse(
+            generate(),
+            media_type="audio/wav",
+            headers={"X-Sample-Rate": "16000", "X-Channels": "1"},
+        )
+    except Exception as ex:
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
+
+@app.post("/tts_stream")
+async def tts_stream(request: Request):
+    try:
+        data = await request.json()
+        text = data.get("text", "")
+        character = data.get("character", "")
+
+        print(f"\n--- [TTS_STREAM Request] ---")
+        print(f"Text: {text}")
+        print(f"Character: {character}")
+        print(f"----------------------------\n")
+
+        global tts
+
+        async def generate():
+            yield make_wav_header(sample_rate=16000)
+            async for wav_chunk in tts.infer_with_ref_audio_embed_stream(character, text):
+                yield wav_chunk.tobytes()
+
+        return StreamingResponse(
+            generate(),
+            media_type="audio/wav",
+            headers={"X-Sample-Rate": "16000", "X-Channels": "1"},
+        )
+    except Exception as ex:
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
+
+@app.get("/")
+async def frontend():
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
 
 @app.get("/audio/voices")
 async def tts_voices():
