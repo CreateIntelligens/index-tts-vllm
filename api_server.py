@@ -110,7 +110,9 @@ async def tts_api_url(request: Request):
             wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
             
         return Response(content=wav_bytes_16k, media_type="audio/wav")
-    except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
+    except Exception as ex:
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
 @app.post("/tts")
 async def tts_api(request: Request):
@@ -132,7 +134,9 @@ async def tts_api(request: Request):
             wav_bytes_16k = await convert_audio_with_ffmpeg(wav_bytes)
             
         return Response(content=wav_bytes_16k, media_type="audio/wav")
-    except Exception as ex: return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
+    except Exception as ex:
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
 @app.post("/tts_url_stream")
 async def tts_url_stream(request: Request):
@@ -160,6 +164,7 @@ async def tts_url_stream(request: Request):
             headers={"X-Sample-Rate": "16000", "X-Channels": "1"},
         )
     except Exception as ex:
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
 @app.post("/tts_stream")
@@ -187,6 +192,7 @@ async def tts_stream(request: Request):
             headers={"X-Sample-Rate": "16000", "X-Channels": "1"},
         )
     except Exception as ex:
+        traceback.print_exc()
         return JSONResponse(status_code=500, content={"status": "error", "error": str(ex)})
 
 @app.get("/")

@@ -54,6 +54,19 @@ class PositionalEncoding(torch.nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
+    def _extend_pe(self, new_len: int, device):
+        """Dynamically extend positional encoding table when input exceeds max_len."""
+        new_len = max(new_len, self.max_len * 2)
+        pe = torch.zeros(new_len, self.d_model)
+        position = torch.arange(0, new_len).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, self.d_model, 2) *
+            -(math.log(10000.0) / self.d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.pe = pe.unsqueeze(0).to(device)
+        self.max_len = new_len
+
     def forward(self,
                 x: torch.Tensor,
                 offset: Union[int, torch.Tensor] = 0) \
@@ -94,13 +107,16 @@ class PositionalEncoding(torch.nn.Module):
         # How to subscript a Union type:
         #   https://github.com/pytorch/pytorch/issues/69434
         if isinstance(offset, int):
-            assert offset + size < self.max_len
+            if offset + size >= self.max_len:
+                self._extend_pe(offset + size + 1, self.pe.device)
             pos_emb = self.pe[:, offset:offset + size]
         elif isinstance(offset, torch.Tensor) and offset.dim() == 0:  # scalar
-            assert offset + size < self.max_len
+            if offset + size >= self.max_len:
+                self._extend_pe(offset + size + 1, self.pe.device)
             pos_emb = self.pe[:, offset:offset + size]
         else:  # for batched streaming decoding on GPU
-            assert torch.max(offset) + size < self.max_len
+            if torch.max(offset) + size >= self.max_len:
+                self._extend_pe(int(torch.max(offset).item()) + size + 1, offset.device)
             index = offset.unsqueeze(1) + \
                 torch.arange(0, size).to(offset.device)  # B X T
             flag = index > 0
