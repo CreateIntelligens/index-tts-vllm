@@ -22,7 +22,7 @@ env/
 *.swo
 *~
 
-# Environment Variables
+# Environment Variables (.env.example 應 commit，.env 含實際密碼不應 commit)
 .env
 .env.local
 

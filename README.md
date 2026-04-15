@@ -58,7 +58,7 @@ cp .env.example .env
 # 4. （可選）編輯 .env 檔案，配置模型相關參數
 # MODEL=IndexTeam/IndexTTS-1.5
 # MODEL_DIR=assets/checkpoints
-# PORT=8011
+# PORT=8001
 # GPU_MEMORY_UTILIZATION=0.25
 # DOWNLOAD_MODEL=1  # 首次啟動時自動下載模型
 # CONVERT_MODEL=1   # 自動轉換模型格式
@@ -144,7 +144,7 @@ VLLM_USE_V1=0 python webui.py
 使用 FastAPI 封裝的 API 接口，啟動範例如下：
 
 ```bash
-VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8011
+VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8001
 ```
 
 **注意：** 一定要帶上 `VLLM_USE_V1=0`，因為本專案沒有對 vLLM 的 v1 版本做相容。
@@ -152,7 +152,7 @@ VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8011
 #### 啟動參數
 - `--model_dir`: 模型權重路徑，預設為 `assets/checkpoints`
 - `--host`: 服務 IP 位址，預設為 `0.0.0.0`
-- `--port`: 服務埠口，預設為 `8011`
+- `--port`: 服務埠口，預設為 `8001`
 - `--gpu_memory_utilization`: vLLM 顯存佔用率，預設設置為 `0.25`
 
 ### 方法二：Docker Compose 部署（推薦）
@@ -167,7 +167,7 @@ cp .env.example .env
 # 3. 編輯 .env 檔案，配置模型相關參數（可選）
 # MODEL=IndexTeam/IndexTTS-1.5
 # MODEL_DIR=assets/checkpoints
-# PORT=8011
+# PORT=8001
 # GPU_MEMORY_UTILIZATION=0.25
 # DOWNLOAD_MODEL=1  # 首次啟動時自動下載模型
 # CONVERT_MODEL=1   # 自動轉換模型格式
@@ -196,7 +196,7 @@ docker compose up -d
 ```python
 import requests
 
-url = "http://localhost:8011/tts_url"
+url = "http://localhost:8001/tts_url"
 data = {
     "text": "還是會想你，還是想登你",
     "audio_paths": [  # 支援多參考音訊
@@ -214,7 +214,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8011/tts"
+url = "http://localhost:8001/tts"
 data = {
     "text": "你好，這是測試文本",
     "character": "test"  # 使用 assets/speaker.json 中定義的角色
@@ -229,7 +229,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8011/audio/speech"
+url = "http://localhost:8001/audio/speech"
 data = {
     "model": "tts-1",
     "input": "這是使用 OpenAI 格式的測試",
@@ -245,7 +245,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8011/audio/voices"
+url = "http://localhost:8001/audio/voices"
 response = requests.get(url)
 print(response.json())
 # 輸出: {"voices": ["test", "abin", "ann", "hayley", ...]}
@@ -278,16 +278,121 @@ print(response.json())
 
 然後在 API 請求中使用 `"character": "my_character"` 即可。
 
+## 文字替換規則（Replacement Rules）
+
+TTS 生成前可套用文字替換規則，將特定詞彙轉換為較易發音的形式（例如 `ISO 9001` → `iso 九零零一`）。
+
+> **背景說明：** 本服務底層模型吃簡體中文，外部呼叫端傳入文字通常已完成繁→簡轉換。替換規則請依照**傳入 API 時的實際文字**撰寫（即簡體），或透過管理介面輸入繁體，系統會自動轉換。
+
+### 管理介面
+
+啟動服務後開啟瀏覽器訪問：
+
+```
+http://localhost:8001/replacementweb
+```
+
+功能包含：
+- 依規則組名稱載入、新增、編輯、刪除規則
+- 批次 JSON 匯入（會清空並重寫該組全部規則）
+- 純文字模式（自動加安全邊界）與進階 Regex 模式切換
+
+### TTS 請求加上替換規則
+
+在任一 TTS 端點的 request body 加入 `replacement` 欄位：
+
+```python
+import requests
+
+data = {
+    "text": "我们通过了ISO 9001认证",
+    "audio_paths": ["assets/voices/xxx.wav"],
+    "replacement": "jti"   # 使用名為 "jti" 的規則組
+}
+response = requests.post("http://localhost:8001/tts_url", json=data)
+```
+
+不帶 `replacement` 欄位則不做任何替換。
+
+### 規則管理 API
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/replacements/{set_name}` | 查看某組所有規則 |
+| POST | `/replacements/{set_name}` | 新增單條規則 |
+| PUT | `/replacements/{set_name}/{id}` | 修改某條規則 |
+| DELETE | `/replacements/{set_name}/{id}` | 刪除某條規則 |
+| POST | `/replacements/{set_name}/bulk` | 批次匯入（覆寫整組） |
+
+### 規則格式
+
+```json
+{
+  "pattern": "ISO 9001",
+  "replacement": "iso 九零零一",
+  "flags": ["IGNORECASE"],
+  "is_regex": false,
+  "order_num": 0
+}
+```
+
+| 欄位 | 說明 |
+|------|------|
+| `pattern` | 比對字串（繁體輸入，系統自動存繁/簡兩份） |
+| `replacement` | 替換結果 |
+| `flags` | Regex flags，常用 `IGNORECASE` |
+| `is_regex` | `false`（預設）= 純文字比對；`true` = 完整 Regex |
+| `order_num` | 執行順序，數字小的先執行 |
+
+**`is_regex: false` 範例（廠商一般用法）：**
+```json
+{"pattern": "ISO 9001", "replacement": "iso 九零零一"}
+```
+
+**`is_regex: true` 範例（進階用法）：**
+```json
+{
+  "pattern": "(?<![A-Za-z0-9])ISO\\s*9001(?![A-Za-z0-9])",
+  "replacement": "iso 九零零一",
+  "flags": ["IGNORECASE"],
+  "is_regex": true
+}
+```
+
+### 批次匯入範例
+
+```bash
+curl -X POST http://localhost:8001/replacements/jti/bulk \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"pattern": "ISO 9001", "replacement": "iso 九零零一", "flags": ["IGNORECASE"]},
+    {"pattern": "ODM", "replacement": "歐低M", "flags": ["IGNORECASE"], "is_regex": false}
+  ]'
+```
+
+### PostgreSQL 連線資訊
+
+規則儲存於 PostgreSQL，預設設定：
+
+| 項目 | 值 |
+|------|----|
+| Host（外部） | `localhost:5422` |
+| Host（容器內） | `postgres:5432` |
+| Database | `indextts` |
+| User / Password | `indextts` / `indextts` |
+
+可透過 `.env` 檔案覆寫 `DB_NAME`、`DB_USER`、`DB_PASSWORD`。
+
 ## 併發測試
 
 參考 [`simple_test.py`](simple_test.py)，需先啟動 API 服務：
 
 ```bash
 # 基本併發測試
-python simple_test.py --url http://localhost:8011/tts --concurrency 16
+python simple_test.py --url http://localhost:8001/tts --concurrency 16
 
 # 測試多個端點
-python simple_test.py --url http://server1:8011/tts http://server2:8011/tts --concurrency 32
+python simple_test.py --url http://server1:8001/tts http://server2:8001/tts --concurrency 32
 ```
 
 ## 微調模型部署

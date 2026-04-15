@@ -147,7 +147,7 @@
 ### 方式 1: 直接運行 Python 腳本
 
 ```bash
-python api_server.py --model_dir ./assets/checkpoints --port 8011
+python api_server.py --model_dir ./assets/checkpoints --port 8001
 ```
 
 ### 方式 2: 使用 Docker Compose
@@ -166,10 +166,10 @@ docker compose up
 
 ```bash
 # 檢查健康狀態
-curl http://localhost:8011/health
+curl http://localhost:8001/health
 
 # 測試 TTS API
-curl -X POST http://localhost:8011/tts \
+curl -X POST http://localhost:8001/tts \
   -H "Content-Type: application/json" \
   -d '{"text": "測試微調模型", "character": "test"}' \
   --output test.wav

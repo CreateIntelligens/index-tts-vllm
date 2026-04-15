@@ -17,6 +17,8 @@ gradio
 ninja
 fastapi
 uvicorn
+asyncpg
+opencc-python-reimplemented
 
 
 WeTextProcessing; platform_machine != "Darwin"

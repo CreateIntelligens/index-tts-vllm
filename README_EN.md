@@ -105,7 +105,7 @@ Note: You must include `VLLM_USE_V1=0`, as this project is not compatible with v
 The API is encapsulated using FastAPI. Here is an example of how to start it:
 
 ```bash
-VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8011
+VLLM_USE_V1=0 python api_server.py --model_dir assets/checkpoints --port 8001
 ```
 
 Note: You must include `VLLM_USE_V1=0`, as this project is not compatible with v1 of vllm.
@@ -113,7 +113,7 @@ Note: You must include `VLLM_USE_V1=0`, as this project is not compatible with v
 ### Startup Parameters
 - `--model_dir`: Model weight path, default is `assets/checkpoints`
 - `--host`: Service IP address, default is `0.0.0.0`
-- `--port`: Service port, default is `8011`
+- `--port`: Service port, default is `8001`
 - `--gpu_memory_utilization`: vllm GPU memory utilization rate, default is `0.25`
 
 ### Method 2: Docker Compose Deployment (Recommended)
@@ -127,7 +127,7 @@ cp .env.example .env
 
 # 3. Edit the .env file to configure model-related parameters (optional)
 # MODEL_DIR=assets/checkpoints
-# PORT=8011
+# PORT=8001
 # GPU_MEMORY_UTILIZATION=0.25
 # DOWNLOAD_MODEL=1  # Automatically download model on first start
 # CONVERT_MODEL=1   # Automatically convert model format
@@ -151,7 +151,7 @@ Advantages of Docker deployment:
 ```python
 import requests
 
-url = "http://localhost:8011/tts_url"
+url = "http://localhost:8001/tts_url"
 data = {
     "text": "Still thinking of you, still want to see you.",
     "audio_paths": [  # Supports multiple reference audios
@@ -169,7 +169,7 @@ with open("output.wav", "wb") as f:
 ```python
 import requests
 
-url = "http://localhost:8011/tts"
+url = "http://localhost:8001/tts"
 data = {
     "text": "Hello, this is test text",
     "character": "test"  # Use character defined in assets/speaker.json

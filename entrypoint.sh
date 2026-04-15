@@ -19,7 +19,7 @@ MODEL=${MODEL:-"IndexTeam/IndexTTS-1.5"}
 VLLM_USE_MODELSCOPE=${VLLM_USE_MODELSCOPE:-1}
 DOWNLOAD_MODEL=${DOWNLOAD_MODEL:-1}
 CONVERT_MODEL=${CONVERT_MODEL:-1}
-PORT=${PORT:-8011}
+PORT=${PORT:-8001}
 
 log_msg "Starting IndexTTS server..."
 log_msg "Model directory: $MODEL_DIR"
