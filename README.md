@@ -17,6 +17,9 @@
 - **支援多角色音訊混合**：可以傳入多個參考音訊，TTS 輸出的角色聲線為多個參考音訊的混合版本（輸入多個參考音訊會導致輸出的角色聲線不穩定，可以抽卡抽到滿意的聲線再作為參考音訊）
 - **Docker 一鍵部署**：支援全自動化容器部署，自動下載模型和轉換格式
 - **OpenAI API 相容**：相容 OpenAI TTS API 格式，方便整合現有應用
+- **串流 TTS API**：`/tts_url_stream`、`/tts_stream` 支援邊生成邊回傳音訊，首音延遲可比非串流版本降低約 3 倍
+- **文字替換規則系統**：基於 PostgreSQL，支援多組規則（set）管理，可在 TTS 生成前自動替換特定詞彙的發音；規則以繁體輸入，系統自動轉簡體存儲
+- **替換規則管理介面**：內建 Web UI（`/replacementweb`），支援規則的新增、編輯、刪除與批次 JSON 匯入
 
 ## 性能表現
 Word Error Rate (WER) Results for IndexTTS and Baseline Models on the [**seed-test**](https://github.com/BytedanceSpeech/seed-tts-eval)
@@ -31,6 +34,13 @@ Word Error Rate (WER) Results for IndexTTS and Baseline Models on the [**seed-te
 基本保持了原專案的性能
 
 ## 更新日誌
+
+- **[2026-04-15]** 新增文字替換規則系統（PostgreSQL）、串流 API、Web 管理介面：
+    1. 新增 `/tts_url_stream`、`/tts_stream` 串流端點，首音延遲大幅降低
+    2. 新增 PostgreSQL 替換規則系統，支援多組規則（set）管理，繁體輸入自動轉簡體
+    3. 新增 `/replacementweb` 管理介面，支援規則增刪改查與批次 JSON 匯入
+    4. 新增 `GET /replacements` 列出所有規則組 API
+    5. TTS 端點支援 `replacement` 參數指定規則組
 
 - **[2024-08-07]** 支援 Docker 全自動化一鍵部署 API 服務：`docker compose up`
 
@@ -190,9 +200,28 @@ docker compose up -d
 
 > **注意：** 首次啟動時，如果啟用了自動下載，需要較長時間下載模型（約 3-4 GB）。可以查看 `logs/` 目錄中的日誌檔案追蹤進度。
 
+### API 端點總覽
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/health` | 健康檢查 |
+| POST | `/tts_url` | TTS 生成（傳入音訊路徑，回傳完整音訊） |
+| POST | `/tts` | TTS 生成（使用預註冊角色，回傳完整音訊） |
+| POST | `/tts_url_stream` | TTS 串流生成（傳入音訊路徑，邊生成邊回傳） |
+| POST | `/tts_stream` | TTS 串流生成（使用預註冊角色，邊生成邊回傳） |
+| POST | `/audio/speech` | OpenAI 相容 TTS 接口 |
+| GET | `/audio/voices` | 取得可用角色列表 |
+| GET | `/replacementweb` | 替換規則 Web 管理介面 |
+| GET | `/replacements` | 列出所有規則組及規則數量 |
+| GET | `/replacements/{set_name}` | 查看某組所有規則 |
+| POST | `/replacements/{set_name}` | 新增單條規則 |
+| PUT | `/replacements/{set_name}/{id}` | 修改某條規則 |
+| DELETE | `/replacements/{set_name}/{id}` | 刪除某條規則 |
+| POST | `/replacements/{set_name}/bulk` | 批次匯入（覆寫整組） |
+
 ### API 請求範例
 
-#### 基本 TTS 請求
+#### 基本 TTS 請求（音訊路徑）
 ```python
 import requests
 
@@ -208,6 +237,23 @@ data = {
 response = requests.post(url, json=data)
 with open("output.wav", "wb") as f:
     f.write(response.content)
+```
+
+#### 串流 TTS（邊生成邊播放，首音延遲更低）
+```python
+import requests
+
+url = "http://localhost:8001/tts_url_stream"
+data = {
+    "text": "還是會想你，還是想登你",
+    "audio_paths": ["audio1.wav"]
+}
+
+with requests.post(url, json=data, stream=True) as response:
+    with open("output.wav", "wb") as f:
+        for chunk in response.iter_content(chunk_size=None):
+            if chunk:
+                f.write(chunk)
 ```
 
 #### 使用預註冊角色
@@ -318,7 +364,8 @@ response = requests.post("http://localhost:8001/tts_url", json=data)
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
-| GET | `/replacements/{set_name}` | 查看某組所有規則 |
+| GET | `/replacements` | 列出所有規則組及各組規則數量 |
+| GET | `/replacements/{set_name}` | 查看某組所有規則（回傳原始繁體輸入） |
 | POST | `/replacements/{set_name}` | 新增單條規則 |
 | PUT | `/replacements/{set_name}/{id}` | 修改某條規則 |
 | DELETE | `/replacements/{set_name}/{id}` | 刪除某條規則 |
@@ -342,7 +389,7 @@ response = requests.post("http://localhost:8001/tts_url", json=data)
 | `replacement` | 替換結果 |
 | `flags` | Regex flags，常用 `IGNORECASE` |
 | `is_regex` | `false`（預設）= 純文字比對；`true` = 完整 Regex |
-| `order_num` | 執行順序，數字小的先執行 |
+| `order_num` | 執行順序，數字小的先執行；相同值時按 `id`（建立先後）排序 |
 
 **`is_regex: false` 範例（廠商一般用法）：**
 ```json

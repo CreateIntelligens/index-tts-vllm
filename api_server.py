@@ -258,11 +258,17 @@ async def tts_stream(request: Request):
         data = await request.json()
         text = data.get("text", "")
         character = data.get("character", "")
+        replacement_set = data.get("replacement", None)
 
         print(f"\n--- [TTS_STREAM Request] ---")
         print(f"Text: {text}")
         print(f"Character: {character}")
+        print(f"Replacement Set: {replacement_set}")
         print(f"----------------------------\n")
+
+        text = await apply_replacements(replacement_set, text)
+        if replacement_set:
+            print(f"[After Replacement] Text: {text}\n")
 
         global tts
 
@@ -291,6 +297,15 @@ async def replacement_web():
     html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "replacement_web.html")
     with open(html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
+
+@app.get("/replacements")
+async def list_sets():
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT set_name, COUNT(*) AS rule_count "
+            "FROM replacement_rules GROUP BY set_name ORDER BY set_name"
+        )
+    return [dict(r) for r in rows]
 
 def build_pattern_hans(pattern_orig: str, is_regex: bool) -> str:
     """is_regex=False 時用 re.escape 轉成字面比對；True 時直接轉簡體保留 regex 語法。"""

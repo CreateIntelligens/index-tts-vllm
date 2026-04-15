@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-TW" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,8 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
+  /* ── Theme variables ── */
+  :root[data-theme="dark"] {
     --bg: #0f1117;
     --surface: #1a1d27;
     --surface2: #22263a;
@@ -23,9 +24,35 @@
     --text: #e2e8f0;
     --text-muted: #7b8db0;
     --text-dim: #4a5578;
-    --radius: 10px;
-    --radius-sm: 6px;
+    --select-bg: #0f1117;
+    --select-text: #e2e8f0;
+    --select-selected-bg: #6c8eff;
+    --select-selected-text: #0f1117;
     --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --theme-icon: "☀️";
+  }
+  :root[data-theme="light"] {
+    --bg: #f0f2f8;
+    --surface: #ffffff;
+    --surface2: #f5f7fc;
+    --border: #d0d7e8;
+    --accent: #4166e8;
+    --accent-hover: #2f55d4;
+    --accent-dim: rgba(65,102,232,0.1);
+    --danger: #e02d3c;
+    --danger-hover: #c0202e;
+    --danger-dim: rgba(224,45,60,0.1);
+    --success: #16a34a;
+    --warn: #d97706;
+    --text: #1a2035;
+    --text-muted: #5a6a8a;
+    --text-dim: #9aa5c0;
+    --select-bg: #ffffff;
+    --select-text: #1a2035;
+    --select-selected-bg: #4166e8;
+    --select-selected-text: #ffffff;
+    --shadow: 0 4px 24px rgba(0,0,0,0.1);
+    --theme-icon: "🌙";
   }
 
   body {
@@ -35,31 +62,44 @@
     font-size: 14px;
     min-height: 100vh;
     padding: 32px 16px;
+    transition: background .2s, color .2s;
   }
 
   .container { max-width: 1000px; margin: 0 auto; }
 
   /* Header */
-  .header { margin-bottom: 32px; }
-  .header h1 {
+  .header {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; margin-bottom: 32px;
+  }
+  .header-left h1 {
     font-size: 22px; font-weight: 700;
-    background: linear-gradient(135deg, #6c8eff, #a78bfa);
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     margin-bottom: 4px;
   }
-  .header p { color: var(--text-muted); font-size: 13px; }
+  .header-left p { color: var(--text-muted); font-size: 13px; }
+
+  /* Theme toggle */
+  .theme-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; cursor: pointer;
+    font-size: 18px; line-height: 1; transition: all .15s;
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .theme-btn:hover { border-color: var(--accent); background: var(--accent-dim); }
 
   /* Set selector bar */
   .set-bar {
     display: flex; gap: 10px; align-items: center;
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px 20px;
+    border-radius: 10px; padding: 16px 20px;
     margin-bottom: 24px;
   }
   .set-bar label { color: var(--text-muted); white-space: nowrap; font-size: 13px; }
   .set-bar input {
     flex: 1; background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 8px 12px;
+    border-radius: 6px; padding: 8px 12px;
     color: var(--text); font-size: 14px; outline: none;
     transition: border-color .2s;
   }
@@ -68,17 +108,17 @@
   /* Buttons */
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 16px; border-radius: var(--radius-sm);
+    padding: 8px 16px; border-radius: 6px;
     font-size: 13px; font-weight: 500; cursor: pointer;
     border: none; transition: all .15s; white-space: nowrap;
   }
-  .btn-primary { background: var(--accent); color: #0f1117; }
+  .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: var(--accent-hover); }
   .btn-ghost {
     background: transparent; color: var(--text-muted);
     border: 1px solid var(--border);
   }
-  .btn-ghost:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+  .btn-ghost:hover { background: var(--accent-dim); color: var(--text); border-color: var(--accent); }
   .btn-danger { background: var(--danger-dim); color: var(--danger); border: 1px solid transparent; }
   .btn-danger:hover { background: var(--danger); color: #fff; }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -89,15 +129,13 @@
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 14px;
   }
-  .stats-bar .count {
-    font-size: 13px; color: var(--text-muted);
-  }
+  .stats-bar .count { font-size: 13px; color: var(--text-muted); }
   .stats-bar .count span { color: var(--accent); font-weight: 600; }
 
   /* Table */
   .table-wrap {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); overflow: hidden; margin-bottom: 24px;
+    border-radius: 10px; overflow: hidden; margin-bottom: 24px;
   }
   table { width: 100%; border-collapse: collapse; }
   thead { background: var(--surface2); }
@@ -115,9 +153,10 @@
     font-size: 12px; color: #a78bfa;
     max-width: 260px; word-break: break-all;
   }
+  :root[data-theme="light"] .cell-pattern { color: #5b21b6; }
   .cell-replacement {
     font-family: 'Fira Code', 'Cascadia Code', monospace;
-    font-size: 12px; color: #4ade80;
+    font-size: 12px; color: var(--success);
     max-width: 180px; word-break: break-all;
   }
   .badge {
@@ -127,55 +166,87 @@
   }
   .badge-regex { background: rgba(251,191,36,.15); color: var(--warn); }
   .badge-plain { background: rgba(74,222,128,.12); color: var(--success); }
-  .badge-flag {
-    background: var(--accent-dim); color: var(--accent);
-    margin: 1px 2px;
-  }
-
+  :root[data-theme="light"] .badge-plain { background: rgba(22,163,74,.12); }
+  .badge-flag { background: var(--accent-dim); color: var(--accent); margin: 1px 2px; }
   .actions { display: flex; gap: 6px; }
 
   /* Empty state */
-  .empty {
-    text-align: center; padding: 48px 16px; color: var(--text-dim);
-  }
-  .empty svg { opacity: .3; margin-bottom: 12px; }
+  .empty { text-align: center; padding: 48px 16px; color: var(--text-dim); }
   .empty p { font-size: 13px; }
 
-  /* Form card */
+  /* Set list */
+  .set-list-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 24px;
+  }
+  .set-list-header {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px;
+  }
+  .set-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .set-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 99px; cursor: pointer;
+    background: var(--accent-dim); border: 1px solid var(--border);
+    font-size: 13px; color: var(--text); transition: all .15s;
+  }
+  .set-chip:hover { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .set-chip .chip-count {
+    font-size: 11px; color: var(--text-muted);
+    background: var(--surface2); padding: 1px 6px;
+    border-radius: 99px; transition: all .15s;
+  }
+  .set-chip:hover .chip-count { background: rgba(255,255,255,.2); color: #fff; }
+  .set-list-empty { font-size: 13px; color: var(--text-dim); }
+
+  /* Form card / modal */
   .form-card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 24px; margin-bottom: 24px;
+    border-radius: 10px; padding: 24px; margin-bottom: 24px;
   }
-  .form-card h2 {
+  .form-card h2, .modal h2 {
     font-size: 15px; font-weight: 600; margin-bottom: 18px;
     padding-bottom: 12px; border-bottom: 1px solid var(--border);
-    color: var(--text);
   }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .form-group { display: flex; flex-direction: column; gap: 6px; }
   .form-group.full { grid-column: 1 / -1; }
   .form-group label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
-  .form-group input, .form-group select, .form-group textarea {
+  .form-group input, .form-group textarea {
     background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 9px 12px;
+    border-radius: 6px; padding: 9px 12px;
     color: var(--text); font-size: 13px; outline: none;
     font-family: inherit; transition: border-color .2s;
   }
-  .form-group input:focus,
-  .form-group select:focus,
-  .form-group textarea:focus { border-color: var(--accent); }
+  .form-group input:focus, .form-group textarea:focus { border-color: var(--accent); }
   .form-group textarea { resize: vertical; min-height: 70px; }
-  .form-group select option { background: var(--surface2); }
+
+  /* ── Custom flag checkboxes ── */
+  .flags-group { display: flex; flex-direction: column; gap: 6px; }
+  .flag-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer; transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .flag-option:hover { border-color: var(--accent); background: var(--accent-dim); }
+  .flag-option input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: var(--accent);
+    cursor: pointer; flex-shrink: 0;
+  }
+  .flag-option .flag-name { font-size: 13px; color: var(--text); font-weight: 500; }
+  .flag-option .flag-desc { font-size: 11px; color: var(--text-muted); margin-left: auto; }
 
   .toggle-row {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 14px;
     background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: 6px;
   }
   .toggle-row label { font-size: 13px; color: var(--text); cursor: pointer; user-select: none; }
   .toggle-row .hint { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-  input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
   .form-actions {
     display: flex; gap: 10px; justify-content: flex-end;
@@ -185,15 +256,13 @@
   /* Bulk import */
   .bulk-card {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 24px;
+    border-radius: 10px; padding: 24px; margin-bottom: 24px;
   }
-  .bulk-card h2 {
-    font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--text);
-  }
+  .bulk-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
   .bulk-card p { font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
   .bulk-card textarea {
     width: 100%; background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px;
+    border-radius: 6px; padding: 12px;
     color: var(--text); font-family: 'Fira Code', monospace; font-size: 12px;
     outline: none; resize: vertical; min-height: 140px;
     transition: border-color .2s;
@@ -205,7 +274,7 @@
   /* Toast */
   #toast {
     position: fixed; bottom: 24px; right: 24px;
-    padding: 12px 20px; border-radius: var(--radius);
+    padding: 12px 20px; border-radius: 10px;
     font-size: 13px; font-weight: 500;
     box-shadow: var(--shadow); z-index: 9999;
     transform: translateY(80px); opacity: 0;
@@ -213,8 +282,8 @@
     pointer-events: none;
   }
   #toast.show { transform: translateY(0); opacity: 1; }
-  #toast.success { background: #14532d; color: var(--success); border: 1px solid rgba(74,222,128,.3); }
-  #toast.error   { background: #450a0a; color: var(--danger);  border: 1px solid rgba(255,92,108,.3); }
+  #toast.success { background: var(--surface); color: var(--success); border: 1px solid rgba(74,222,128,.4); }
+  #toast.error   { background: var(--surface); color: var(--danger);  border: 1px solid rgba(255,92,108,.4); }
 
   /* Modal */
   .modal-backdrop {
@@ -224,13 +293,9 @@
   .modal-backdrop.open { display: flex; }
   .modal {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 28px; width: 560px; max-width: 95vw;
+    border-radius: 10px; padding: 28px; width: 560px; max-width: 95vw;
     box-shadow: var(--shadow);
   }
-  .modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
-  .modal .form-actions { margin-top: 20px; }
-
-  .divider { height: 1px; background: var(--border); margin: 6px 0; }
 
   @media (max-width: 640px) {
     .form-grid { grid-template-columns: 1fr; }
@@ -242,8 +307,19 @@
 <div class="container">
 
   <div class="header">
-    <h1>替換規則管理</h1>
-    <p>管理 TTS 文字替換規則，輸入規則組名稱後載入進行新增、修改或刪除。</p>
+    <div class="header-left">
+      <h1>替換規則管理</h1>
+      <p>管理 TTS 文字替換規則，輸入規則組名稱後載入進行新增、修改或刪除。</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切換明暗模式">☀️</button>
+  </div>
+
+  <!-- Set list -->
+  <div class="set-list-card" id="setListCard">
+    <div class="set-list-header">已建立的規則組</div>
+    <div class="set-chips" id="setChips">
+      <span class="set-list-empty">載入中...</span>
+    </div>
   </div>
 
   <!-- Set selector -->
@@ -282,15 +358,13 @@
 
   <div id="emptyState" style="display:none">
     <div class="empty">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
+      <p style="margin-bottom:8px;font-size:32px">📭</p>
       <p>此規則組目前沒有規則，點擊「新增規則」開始建立。</p>
     </div>
   </div>
 
   <!-- Bulk import -->
-  <div class="bulk-card" id="bulkSection" style="display:none; margin-bottom:24px">
+  <div class="bulk-card" id="bulkSection" style="display:none">
     <h2>批次匯入 JSON</h2>
     <p>貼上 JSON 陣列，每筆需包含 <code style="color:var(--accent)">pattern</code> 與 <code style="color:var(--accent)">replacement</code> 欄位。<strong style="color:var(--danger)">匯入後會清空此組現有規則。</strong></p>
     <textarea id="bulkJson" placeholder='[
@@ -304,7 +378,7 @@
     </div>
   </div>
 
-</div><!-- /container -->
+</div>
 
 <!-- Add / Edit Modal -->
 <div class="modal-backdrop" id="ruleModal">
@@ -321,22 +395,34 @@
         <input id="fReplacement" placeholder="例如：iso 九零零一" autocomplete="off">
       </div>
       <div class="form-group">
-        <label>Flags（多選）</label>
-        <select id="fFlags" multiple size="3" style="height:72px">
-          <option value="IGNORECASE" selected>IGNORECASE（忽略大小寫）</option>
-          <option value="MULTILINE">MULTILINE</option>
-          <option value="DOTALL">DOTALL</option>
-        </select>
+        <label>Flags</label>
+        <div class="flags-group">
+          <label class="flag-option">
+            <input type="checkbox" name="flag" value="IGNORECASE" checked>
+            <span class="flag-name">IGNORECASE</span>
+            <span class="flag-desc">忽略大小寫</span>
+          </label>
+          <label class="flag-option">
+            <input type="checkbox" name="flag" value="MULTILINE">
+            <span class="flag-name">MULTILINE</span>
+            <span class="flag-desc">多行模式</span>
+          </label>
+          <label class="flag-option">
+            <input type="checkbox" name="flag" value="DOTALL">
+            <span class="flag-name">DOTALL</span>
+            <span class="flag-desc">. 匹配換行</span>
+          </label>
+        </div>
       </div>
       <div class="form-group">
         <label>順序 order_num</label>
         <input id="fOrder" type="number" value="0" min="0">
-      </div>
-      <div class="form-group full">
-        <div class="toggle-row">
+        <div class="toggle-row" style="margin-top:10px">
           <input type="checkbox" id="fIsRegex" onchange="onRegexToggle(this)">
-          <label for="fIsRegex">進階模式（is_regex）</label>
-          <span class="hint">開啟後 pattern 直接作為 Regex 使用</span>
+          <label for="fIsRegex" style="font-size:13px">進階模式（is_regex）</label>
+        </div>
+        <div id="regexHintBox" style="font-size:11px;color:var(--text-muted);padding:6px 2px;display:none">
+          開啟後 pattern 直接作為 Regex 使用，繁體字元自動轉簡體
         </div>
       </div>
     </div>
@@ -352,6 +438,47 @@
 <script>
 let currentSet = '';
 let rules = [];
+
+// ── Set list ─────────────────────────────────────────────
+async function loadSetList() {
+  try {
+    const res = await fetch(`${getBase()}/replacements`);
+    const sets = await res.json();
+    const container = document.getElementById('setChips');
+    if (!sets.length) {
+      container.innerHTML = '<span class="set-list-empty">尚無任何規則組</span>';
+      return;
+    }
+    container.innerHTML = sets.map(s => `
+      <span class="set-chip" onclick="selectSet('${esc(s.set_name)}')">
+        ${esc(s.set_name)}
+        <span class="chip-count">${s.rule_count}</span>
+      </span>
+    `).join('');
+  } catch(e) {
+    document.getElementById('setChips').innerHTML = '<span class="set-list-empty">無法載入</span>';
+  }
+}
+
+function selectSet(name) {
+  document.getElementById('setNameInput').value = name;
+  loadRules();
+}
+
+// ── Theme ────────────────────────────────────────────────
+function toggleTheme() {
+  const root = document.documentElement;
+  const isDark = root.getAttribute('data-theme') === 'dark';
+  const next = isDark ? 'light' : 'dark';
+  root.setAttribute('data-theme', next);
+  document.getElementById('themeBtn').textContent = isDark ? '🌙' : '☀️';
+  localStorage.setItem('rtw-theme', next);
+}
+(function initTheme() {
+  const saved = localStorage.getItem('rtw-theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+  document.getElementById('themeBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+})();
 
 function getBase() { return window.location.origin; }
 
@@ -400,7 +527,7 @@ function showAddForm() {
   document.getElementById('fReplacement').value = '';
   document.getElementById('fOrder').value = rules.length;
   document.getElementById('fIsRegex').checked = false;
-  setFlagOptions(['IGNORECASE']);
+  setFlags(['IGNORECASE']);
   onRegexToggle(document.getElementById('fIsRegex'));
   document.getElementById('ruleModal').classList.add('open');
 }
@@ -414,7 +541,7 @@ function openEdit(id) {
   document.getElementById('fReplacement').value = r.replacement;
   document.getElementById('fOrder').value = r.order_num ?? 0;
   document.getElementById('fIsRegex').checked = !!r.is_regex;
-  setFlagOptions(r.flags || []);
+  setFlags(r.flags || []);
   onRegexToggle(document.getElementById('fIsRegex'));
   document.getElementById('ruleModal').classList.add('open');
 }
@@ -423,31 +550,38 @@ function closeModal() {
   document.getElementById('ruleModal').classList.remove('open');
 }
 
-function setFlagOptions(selected) {
-  const sel = document.getElementById('fFlags');
-  for (const opt of sel.options) opt.selected = selected.includes(opt.value);
+function setFlags(selected) {
+  document.querySelectorAll('input[name="flag"]').forEach(cb => {
+    cb.checked = selected.includes(cb.value);
+  });
+}
+
+function getFlags() {
+  return Array.from(document.querySelectorAll('input[name="flag"]:checked')).map(cb => cb.value);
 }
 
 function onRegexToggle(cb) {
   const hint = document.getElementById('patternHint');
-  hint.textContent = cb.checked
-    ? '（進階：直接輸入完整 Regex，繁體字元自動轉簡體）'
-    : '（純文字，系統自動加上安全比對）';
+  const hintBox = document.getElementById('regexHintBox');
+  if (cb.checked) {
+    hint.textContent = '（進階：直接輸入完整 Regex）';
+    hintBox.style.display = '';
+  } else {
+    hint.textContent = '（純文字，系統自動加上安全比對）';
+    hintBox.style.display = 'none';
+  }
 }
 
 async function saveRule() {
   const id = document.getElementById('editId').value;
-  const sel = document.getElementById('fFlags');
-  const flags = Array.from(sel.options).filter(o => o.selected).map(o => o.value);
   const body = {
     pattern:     document.getElementById('fPattern').value.trim(),
     replacement: document.getElementById('fReplacement').value.trim(),
-    flags,
+    flags:       getFlags(),
     is_regex:    document.getElementById('fIsRegex').checked,
     order_num:   parseInt(document.getElementById('fOrder').value) || 0,
   };
   if (!body.pattern) { toast('Pattern 不能為空', 'error'); return; }
-
   try {
     const url = id
       ? `${getBase()}/replacements/${encodeURIComponent(currentSet)}/${id}`
@@ -526,15 +660,22 @@ function toast(msg, type = 'success') {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-// Close modal on backdrop click
 document.getElementById('ruleModal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
 });
-
-// Enter key in set input
 document.getElementById('setNameInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') loadRules();
 });
+
+// 初始載入規則組列表
+loadSetList();
+
+// loadRules 完成後重整 chip（數量可能變動）
+const _origLoadRules = loadRules;
+loadRules = async function() {
+  await _origLoadRules();
+  loadSetList();
+};
 </script>
 </body>
 </html>
