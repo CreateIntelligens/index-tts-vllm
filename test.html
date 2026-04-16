@@ -262,6 +262,13 @@
       <div class="hint">多個路徑以英文逗號分隔</div>
     </div>
 
+    <div class="field">
+      <div class="field-label">替換規則組（可選）</div>
+      <select id="replacementSelect">
+        <option value="">— 不使用 —</option>
+      </select>
+    </div>
+
     <button class="btn-generate" id="btnGenerate" onclick="startGenerate()">
       <div class="spinner"></div>
       <span>▶ 開始生成</span>
@@ -464,6 +471,23 @@ async function loadVoices() {
   }
 }
 
+async function loadReplacementSets() {
+  try {
+    const sets = await (await fetch(API + '/replacements')).json();
+    const sel = document.getElementById('replacementSelect');
+    if (Array.isArray(sets) && sets.length > 0) {
+      sets.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.set_name;
+        opt.textContent = `${s.set_name}（${s.rule_count} 條）`;
+        sel.appendChild(opt);
+      });
+    }
+  } catch {
+    // DB 未連線或無規則，保持預設「不使用」
+  }
+}
+
 /* ── AudioContext helpers ────────────────────── */
 function ensureActx() {
   if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SR });
@@ -541,6 +565,8 @@ async function startGenerate() {
   setPlayerStatus('streaming', '連線中…');
   vizStart(); progressStart();
 
+  const replacement = document.getElementById('replacementSelect').value || null;
+
   let url, body;
   if (mode === 'character') {
     const ch = document.getElementById('charSelect').value;
@@ -552,6 +578,7 @@ async function startGenerate() {
     url = API + '/tts_url_stream';
     body = { text, audio_paths: paths.split(',').map(s => s.trim()).filter(Boolean) };
   }
+  if (replacement) body.replacement = replacement;
 
   try {
     const res = await fetch(url, {
@@ -701,6 +728,7 @@ function downloadAudio() {
 
 /* ── Init ────────────────────────────────────── */
 loadVoices();
+loadReplacementSets();
 setState('IDLE');
 vizDraw();
 progressLoop(); // keep time display refreshed
