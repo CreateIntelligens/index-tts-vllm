@@ -158,7 +158,7 @@ class IndexTTS:
         wav_data = trim_and_pad_silence(wav_data)
         return (24000, wav_data)
 
-    async def infer_with_ref_audio_embed(self, speaker: str, text):
+    async def infer_with_ref_audio_embed(self, speaker: str, text, seed=None):
         start_time = time.perf_counter()
         if speaker not in self.speaker_dict: raise Exception(f"Speaker {speaker} not found")
         auto_conditioning = self.speaker_dict[speaker]["auto_conditioning"]
@@ -174,6 +174,7 @@ class IndexTTS:
             text_tokens = torch.tensor(self.tokenizer.convert_tokens_to_ids(sent), dtype=torch.int32, device=self.device).unsqueeze(0)
             m_start = time.perf_counter()
             with torch.no_grad():
+                self.gpt.sampling_params.seed = int(seed) if seed is not None else None
                 codes, _ = await self.gpt.inference_speech(speech_conditioning_latent, text_tokens)
                 codes = torch.tensor(codes, dtype=torch.long, device=self.device).unsqueeze(0)
                 latent = self.gpt(speech_conditioning_latent, text_tokens,
@@ -258,7 +259,7 @@ class IndexTTS:
             wav_16k = torchaudio.functional.resample(wav_t, 24000, 16000)
             yield (wav_16k.clamp(-1.0, 1.0) * 32767.0).short().numpy().T
 
-    async def infer_with_ref_audio_embed_stream(self, speaker: str, text):
+    async def infer_with_ref_audio_embed_stream(self, speaker: str, text, seed=None):
         """Async generator: yields raw int16 numpy PCM chunks (16kHz mono) per sentence."""
         if speaker not in self.speaker_dict:
             raise Exception(f"Speaker {speaker} not found")
@@ -271,6 +272,7 @@ class IndexTTS:
         for i, sent in enumerate(sentences):
             text_tokens = torch.tensor(self.tokenizer.convert_tokens_to_ids(sent), dtype=torch.int32, device=self.device).unsqueeze(0)
             with torch.no_grad():
+                self.gpt.sampling_params.seed = int(seed) if seed is not None else None
                 codes, _ = await self.gpt.inference_speech(speech_conditioning_latent, text_tokens)
                 codes = torch.tensor(codes, dtype=torch.long, device=self.device).unsqueeze(0)
                 latent = self.gpt(speech_conditioning_latent, text_tokens,

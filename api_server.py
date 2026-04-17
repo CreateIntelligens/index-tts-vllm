@@ -1,5 +1,6 @@
 import os
 import re
+import base64
 import asyncio
 import io
 import struct
@@ -90,19 +91,42 @@ async def init_db(pool):
         """)
 
 async def apply_replacements(set_name: str, text: str) -> str:
-    if not db_pool or not set_name:
+    if not db_pool:
         return text
+
+    async def _apply_rows(rows, t: str) -> str:
+        for row in rows:
+            flag_val = 0
+            for f in (row['flags'] or []):
+                flag_val |= getattr(re, f, 0)
+            t = re.sub(row['pattern_hans'], row['replacement_hans'], t, flags=flag_val)
+        return t
+
     async with db_pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT pattern_hans, replacement_hans, flags FROM replacement_rules "
-            "WHERE set_name = $1 ORDER BY order_num, id",
-            set_name
-        )
-    for row in rows:
-        flag_val = 0
-        for f in (row['flags'] or []):
-            flag_val |= getattr(re, f, 0)
-        text = re.sub(row['pattern_hans'], row['replacement_hans'], text, flags=flag_val)
+        if set_name and set_name != '_global_':
+            # 廠商組先跑（組內長度降冪），全域組後跑（組內長度降冪）
+            # 廠商先佔位，全域只處理廠商沒動到的部分
+            vendor_rows = await conn.fetch(
+                "SELECT pattern_hans, replacement_hans, flags FROM replacement_rules "
+                "WHERE set_name = $1 "
+                "ORDER BY LENGTH(pattern_hans) DESC, order_num, id",
+                set_name
+            )
+            global_rows = await conn.fetch(
+                "SELECT pattern_hans, replacement_hans, flags FROM replacement_rules "
+                "WHERE set_name = '_global_' "
+                "ORDER BY LENGTH(pattern_hans) DESC, order_num, id"
+            )
+            text = await _apply_rows(vendor_rows, text)
+            text = await _apply_rows(global_rows, text)
+        else:
+            rows = await conn.fetch(
+                "SELECT pattern_hans, replacement_hans, flags FROM replacement_rules "
+                "WHERE set_name = $1 "
+                "ORDER BY LENGTH(pattern_hans) DESC, order_num, id",
+                set_name or '_global_'
+            )
+            text = await _apply_rows(rows, text)
     return text
 
 @asynccontextmanager
@@ -129,6 +153,28 @@ async def lifespan(app: FastAPI):
     await init_db(db_pool)
     yield
     await db_pool.close()
+
+def _check_admin_auth(request: Request) -> bool:
+    admin_user = os.getenv("ADMIN_USER", "admin")
+    admin_pass = os.getenv("ADMIN_PASSWORD", "admin")
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+        user, password = decoded.split(":", 1)
+        return user == admin_user and password == admin_pass
+    except Exception:
+        return False
+
+def _require_admin_auth(request: Request):
+    if not _check_admin_auth(request):
+        return Response(
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin"'},
+            content="Unauthorized",
+        )
+    return None
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -161,7 +207,7 @@ async def tts_api_url(request: Request):
         data = await request.json()
         text = data.get("text", "")
         audio_paths = data.get("audio_paths", [])
-        seed = data.get("seed", 8)
+        seed = data.get("seed", 2)
         replacement_set = data.get("replacement", None)
 
         print(f"\n--- [TTS_URL Request] ---")
@@ -193,11 +239,13 @@ async def tts_api(request: Request):
         data = await request.json()
         text = data.get("text", "")
         character = data.get("character", "")
+        seed = data.get("seed", 2)
         replacement_set = data.get("replacement", None)
 
         print(f"\n--- [TTS Request] ---")
         print(f"Text: {text}")
         print(f"Character: {character}")
+        print(f"Seed: {seed}")
         print(f"Replacement Set: {replacement_set}")
         print(f"---------------------\n")
 
@@ -206,7 +254,7 @@ async def tts_api(request: Request):
             print(f"[After Replacement] Text: {text}\n")
 
         global tts
-        sr, wav = await tts.infer_with_ref_audio_embed(character, text)
+        sr, wav = await tts.infer_with_ref_audio_embed(character, text, seed=seed)
         
         async with audio_processing_semaphore:
             wav_bytes = await asyncio.to_thread(wav_to_bytes, wav, sr)
@@ -223,7 +271,7 @@ async def tts_url_stream(request: Request):
         data = await request.json()
         text = data.get("text", "")
         audio_paths = data.get("audio_paths", [])
-        seed = data.get("seed", None)
+        seed = data.get("seed", 2)
         replacement_set = data.get("replacement", None)
 
         print(f"\n--- [TTS_URL_STREAM Request] ---")
@@ -258,11 +306,13 @@ async def tts_stream(request: Request):
         data = await request.json()
         text = data.get("text", "")
         character = data.get("character", "")
+        seed = data.get("seed", 2)
         replacement_set = data.get("replacement", None)
 
         print(f"\n--- [TTS_STREAM Request] ---")
         print(f"Text: {text}")
         print(f"Character: {character}")
+        print(f"Seed: {seed}")
         print(f"Replacement Set: {replacement_set}")
         print(f"----------------------------\n")
 
@@ -274,7 +324,7 @@ async def tts_stream(request: Request):
 
         async def generate():
             yield make_wav_header(sample_rate=16000)
-            async for wav_chunk in tts.infer_with_ref_audio_embed_stream(character, text):
+            async for wav_chunk in tts.infer_with_ref_audio_embed_stream(character, text, seed=seed):
                 yield wav_chunk.tobytes()
 
         return StreamingResponse(
@@ -293,19 +343,31 @@ async def frontend():
         return HTMLResponse(f.read())
 
 @app.get("/replacementweb")
-async def replacement_web():
+async def replacement_web(request: Request):
+    denied = _require_admin_auth(request)
+    if denied:
+        return denied
     html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "replacement_web.html")
     with open(html_path, "r", encoding="utf-8") as f:
         return HTMLResponse(f.read())
 
+@app.get("/vendorweb")
+async def vendor_web():
+    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor_web.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
 @app.get("/replacements")
-async def list_sets():
+async def list_sets(hide_global: bool = False):
     async with db_pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT set_name, COUNT(*) AS rule_count "
             "FROM replacement_rules GROUP BY set_name ORDER BY set_name"
         )
-    return [dict(r) for r in rows]
+    result = [dict(r) for r in rows]
+    if hide_global:
+        result = [r for r in result if r["set_name"] != "_global_"]
+    return result
 
 def build_pattern_hans(pattern_orig: str, is_regex: bool) -> str:
     """is_regex=False 時用 re.escape 轉成字面比對；True 時直接轉簡體保留 regex 語法。"""
@@ -386,11 +448,41 @@ async def delete_rule(set_name: str, rule_id: int):
         return JSONResponse(status_code=404, content={"error": "rule not found"})
     return {"deleted": rule_id}
 
+@app.get("/replacements/{set_name}/export")
+async def export_rules(set_name: str):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT pattern_original AS pattern, replacement_original AS replacement, "
+            "flags, is_regex, order_num "
+            "FROM replacement_rules WHERE set_name = $1 ORDER BY order_num, id",
+            set_name
+        )
+    data = [dict(r) for r in rows]
+    json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{set_name}_rules.json"'},
+    )
+
 @app.post("/replacements/{set_name}/bulk")
-async def bulk_import_rules(set_name: str, request: Request):
+async def bulk_import_rules(set_name: str, request: Request, mode: str = "overwrite"):
     rules = await request.json()
     async with db_pool.acquire() as conn:
-        await conn.execute("DELETE FROM replacement_rules WHERE set_name=$1", set_name)
+        if mode == "overwrite":
+            await conn.execute("DELETE FROM replacement_rules WHERE set_name=$1", set_name)
+            start_order = 0
+        else:
+            existing = await conn.fetch(
+                "SELECT pattern_original FROM replacement_rules WHERE set_name=$1", set_name
+            )
+            existing_patterns = {r["pattern_original"] for r in existing}
+            rules = [r for r in rules if r["pattern"] not in existing_patterns]
+            max_order = await conn.fetchval(
+                "SELECT COALESCE(MAX(order_num), -1) FROM replacement_rules WHERE set_name=$1", set_name
+            )
+            start_order = max_order + 1
+
         await conn.executemany(
             "INSERT INTO replacement_rules "
             "(set_name, pattern_original, pattern_hans, replacement_original, replacement_hans, flags, is_regex, order_num) "
@@ -404,12 +496,59 @@ async def bulk_import_rules(set_name: str, request: Request):
                     to_hans(r["replacement"]),
                     r.get("flags", []),
                     r.get("is_regex", False),
-                    i,
+                    start_order + i,
                 )
                 for i, r in enumerate(rules)
             ]
         )
-    return {"imported": len(rules), "set_name": set_name}
+    return {"imported": len(rules), "set_name": set_name, "mode": mode}
+
+@app.post("/replacements/{new_set}/clone/{source_set}")
+async def clone_rules(new_set: str, source_set: str, mode: str = "overwrite"):
+    async with db_pool.acquire() as conn:
+        source_rows = await conn.fetch(
+            "SELECT pattern_original, pattern_hans, replacement_original, replacement_hans, "
+            "flags, is_regex, order_num "
+            "FROM replacement_rules WHERE set_name = $1 ORDER BY order_num, id",
+            source_set
+        )
+        if not source_rows:
+            return JSONResponse(status_code=404, content={"error": f"source set '{source_set}' not found or empty"})
+
+        if mode == "overwrite":
+            await conn.execute("DELETE FROM replacement_rules WHERE set_name=$1", new_set)
+            rows_to_insert = source_rows
+            start_order = 0
+        else:
+            existing = await conn.fetch(
+                "SELECT pattern_original FROM replacement_rules WHERE set_name=$1", new_set
+            )
+            existing_patterns = {r["pattern_original"] for r in existing}
+            rows_to_insert = [r for r in source_rows if r["pattern_original"] not in existing_patterns]
+            max_order = await conn.fetchval(
+                "SELECT COALESCE(MAX(order_num), -1) FROM replacement_rules WHERE set_name=$1", new_set
+            )
+            start_order = max_order + 1
+
+        await conn.executemany(
+            "INSERT INTO replacement_rules "
+            "(set_name, pattern_original, pattern_hans, replacement_original, replacement_hans, flags, is_regex, order_num) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            [
+                (
+                    new_set,
+                    r["pattern_original"],
+                    r["pattern_hans"],
+                    r["replacement_original"],
+                    r["replacement_hans"],
+                    list(r["flags"]) if r["flags"] else [],
+                    r["is_regex"],
+                    start_order + i,
+                )
+                for i, r in enumerate(rows_to_insert)
+            ]
+        )
+    return {"cloned": len(rows_to_insert), "source": source_set, "target": new_set, "mode": mode}
 
 @app.get("/audio/voices")
 async def tts_voices():
