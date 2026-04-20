@@ -844,6 +844,7 @@ function showBulkImport() { document.getElementById('bulkSection').classList.add
 function hideBulkImport() {
   document.getElementById('bulkSection').classList.remove('open');
   document.getElementById('uploadFileName').textContent = '未選擇任何檔案';
+  document.getElementById('bulkJson').value = '';
 }
 
 function onFileSelect(input) {
