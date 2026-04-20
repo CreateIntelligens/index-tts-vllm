@@ -184,6 +184,18 @@
   .bnd-help-box th { font-weight: 600; color: var(--text-m); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
   .bnd-label { font-size: 10px; color: var(--text-d); align-self: center; margin-right: 2px; }
 
+  /* ── Card ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 12px;
+  }
+  .card-hd {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-label { font-size: 11px; font-weight: 600; color: var(--text-m); letter-spacing: .05em; text-transform: uppercase; }
+  .card-body  { padding: 14px 16px; }
+
   /* ── Toast ── */
   #toast {
     position: fixed; bottom: 24px; right: 24px;
@@ -248,16 +260,16 @@
   <!-- Rules section -->
   <div id="rulesSection" style="display:none">
     <!-- TTS Preview -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-hd" style="padding:12px 16px;border-bottom:1px solid var(--border)">
-        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-m)">🎵 試聽 TTS</span>
+    <div class="card">
+      <div class="card-hd">
+        <span class="card-label">🎵 試聽 TTS</span>
       </div>
-      <div style="padding:14px 16px">
+      <div class="card-body">
         <div class="preview-row">
           <textarea id="previewText" placeholder="輸入要試聽的文字，確認替換規則是否正確生效…"></textarea>
           <button class="btn btn-p" id="previewBtn" onclick="doPreview()" style="flex-shrink:0">▶ 試聽</button>
         </div>
-        <div class="preview-meta">套用規則組：<span style="color:var(--text-m)" id="previewSetLabel"></span></div>
+        <div class="preview-meta">套用規則組：<span id="previewSetLabel"></span></div>
         <audio id="previewAudio" controls style="display:none"></audio>
       </div>
     </div>

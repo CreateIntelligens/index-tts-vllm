@@ -279,7 +279,9 @@
   .mbk {
     position: fixed; inset: 0;
     background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
-    z-index: 100; display: none; align-items: center; justify-content: center;
+    z-index: 100; display: none;
+    align-items: flex-start; justify-content: center;
+    overflow-y: auto; padding: 32px 16px;
   }
   .mbk.open { display: flex; }
   .modal {
@@ -287,6 +289,7 @@
     border-radius: 14px; padding: 24px; width: 560px; max-width: 95vw;
     box-shadow: var(--shadow);
     animation: mIn .2s ease;
+    flex-shrink: 0;
   }
   @keyframes mIn { from { transform: scale(.96) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
   .m-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
@@ -644,10 +647,34 @@ async function loadGlobalRules(setName) {
         <td><div class="t-pat">${esc(r.pattern)}</div></td>
         <td class="t-arr">→</td>
         <td><div class="t-rep">${esc(r.replacement)}</div></td>
-        <td><span class="badge ${r.is_regex ? 'b-rx' : 'b-pl'}">${r.is_regex ? 'Regex' : '純文字'}</span></td>
+        <td>${typeBadge(r)}</td>
         <td>${(r.flags||[]).map(f=>`<span class="badge b-fl">${f}</span>`).join('')}</td>
       </tr>`).join('');
   } catch { sec.style.display = 'none'; }
+}
+
+const _CJK_P = "\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u3001\uff08\uff09\u3010\u3011\u300a\u300b\u201c\u201d\u2018\u2019";
+const _BMAP = {
+  cn:    ["(?<![^\\s\\n" + _CJK_P + "])", "(?![^\\s\\n" + _CJK_P + "])"],
+  alpha: ["(?<![A-Za-z])",                 "(?![A-Za-z])"],
+  en:    ["(?<![A-Za-z0-9])",              "(?![A-Za-z0-9])"],
+  all:   ["(?<![A-Za-z0-9\\u4e00-\\u9fff])","(?![A-Za-z0-9\\u4e00-\\u9fff])"],
+  wb:    ["\\b",                           "\\b"],
+};
+const _BND_LABEL = { cn: '中文詞', alpha: '英邊界', en: '英數邊界', all: '中英數邊界', wb: '\\b' };
+
+function detectBnd(pattern) {
+  for (const [t, [p, s]] of Object.entries(_BMAP)) {
+    if (pattern.startsWith(p) && pattern.endsWith(s)) return t;
+  }
+  return null;
+}
+
+function typeBadge(r) {
+  const bnd = r.is_regex ? detectBnd(r.pattern) : null;
+  if (!r.is_regex) return `<span class="badge b-pl">純文字</span>`;
+  if (bnd) return `<span class="badge b-rx">Regex</span> <span class="badge b-fl">${_BND_LABEL[bnd]}</span>`;
+  return `<span class="badge b-rx">Regex</span>`;
 }
 
 function renderTable() {
@@ -661,7 +688,7 @@ function renderTable() {
       <td><div class="t-pat">${esc(r.pattern)}</div></td>
       <td class="t-arr">→</td>
       <td><div class="t-rep">${esc(r.replacement)}</div></td>
-      <td><span class="badge ${r.is_regex ? 'b-rx' : 'b-pl'}">${r.is_regex ? 'Regex' : '純文字'}</span></td>
+      <td>${typeBadge(r)}</td>
       <td>${(r.flags||[]).map(f=>`<span class="badge b-fl">${f}</span>`).join('')}</td>
       <td><div class="acts">
         <button class="btn btn-g btn-sm" onclick="openEdit(${r.id})">編輯</button>
@@ -697,19 +724,7 @@ function openEdit(id) {
   setFlags(r.flags || []);
   onRegexToggle(document.getElementById('fIsRegex'));
   // 偵測並高亮當前邊界
-  const CJK_P = "\uff0c\u3002\uff01\uff1f\uff1b\uff1a\u3001\uff08\uff09\u3010\u3011\u300a\u300b\u201c\u201d\u2018\u2019";
-  const BMAP = {
-    cn:    ["(?<![^\\s\\n" + CJK_P + "])", "(?![^\\s\\n" + CJK_P + "])"],
-    alpha: ["(?<![A-Za-z])",                "(?![A-Za-z])"],
-    en:    ["(?<![A-Za-z0-9])",             "(?![A-Za-z0-9])"],
-    all:   ["(?<![A-Za-z0-9\\u4e00-\\u9fff])","(?![A-Za-z0-9\\u4e00-\\u9fff])"],
-    wb:    ["\\b",                          "\\b"],
-  };
-  let detected = null;
-  for (const [t, [p, s]] of Object.entries(BMAP)) {
-    if (r.pattern.startsWith(p) && r.pattern.endsWith(s)) { detected = t; break; }
-  }
-  setBndActive(detected);
+  setBndActive(detectBnd(r.pattern));
   document.getElementById('boundaryHelp').style.display = 'none';
   document.getElementById('ruleModal').classList.add('open');
 }
