@@ -225,6 +225,7 @@
   .fg input:focus { border-color: var(--text-d); }
   .m-acts { display: flex; gap: 8px; justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--border); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -506,7 +507,16 @@ async function deleteRule(id) {
   } catch(e) { toast('刪除失敗：' + e.message, 'error'); }
 }
 
+let _t2s = null;
 let _previewCtx = null;
+
+async function toSimplified(text) {
+  try {
+    if (!_t2s && typeof OpenCC !== 'undefined') _t2s = OpenCC.Converter({ from: 'tw', to: 'cn' });
+    if (_t2s) return await _t2s(text);
+  } catch(e) {}
+  return text;
+}
 
 async function doPreview() {
   const text = document.getElementById('previewText').value.trim();
@@ -519,10 +529,11 @@ async function doPreview() {
   btn.textContent = '連線中…';
 
   try {
+    const simplified = await toSimplified(text);
     const res = await fetch('/tts_stream', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ text, character: 'hayley', replacement: SET_NAME }),
+      body: JSON.stringify({ text: simplified, character: 'hayley', replacement: SET_NAME }),
     });
     if (!res.ok) throw new Error(await res.text());
 

@@ -334,6 +334,7 @@
     .ag     { gap: 4px; }
   }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -898,7 +899,16 @@ async function doClone(mode = 'overwrite') {
   } catch(e) { toast('複製失敗：' + e.message, 'error'); }
 }
 
+let _t2s = null;
 let _previewCtx = null;
+
+async function toSimplified(text) {
+  try {
+    if (!_t2s && typeof OpenCC !== 'undefined') _t2s = OpenCC.Converter({ from: 'tw', to: 'cn' });
+    if (_t2s) return await _t2s(text);
+  } catch(e) {}
+  return text;
+}
 
 async function doPreview() {
   const text = document.getElementById('previewText').value.trim();
@@ -911,7 +921,8 @@ async function doPreview() {
   btn.textContent = '連線中…';
 
   try {
-    const body = { text, character: 'hayley' };
+    const simplified = await toSimplified(text);
+    const body = { text: simplified, character: 'hayley' };
     if (currentSet) body.replacement = currentSet;
     const res = await fetch('/tts_stream', {
       method: 'POST',
